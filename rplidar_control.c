@@ -8,6 +8,9 @@
 #include <errno.h>
 #include <string.h>
 #include <inttypes.h>
+#include <time.h>
+#include <sys/time.h>
+#include <math.h>
 
 #include "rplidar_control.h"
 
@@ -76,6 +79,10 @@ rplidar_t* rplidar_create() {
     if ( fcntl( rplidar->serial_fd, F_SETFL, FNDELAY ) ) {
         printf("Error: Line number %d in file %s \n", __LINE__, __FILE__);
     }
+
+    settings.c_cc[VTIME] = 0;	/* inter-character timer unused */
+    settings.c_cc[VMIN] = 1;	/* blocking read until 1 chars received */
+    
     if ( tcsetattr( rplidar->serial_fd, TCSANOW, &settings ) ) {
         printf("Error: line number %d in file %s \n", __LINE__, __FILE__);
     }
@@ -257,17 +264,21 @@ void rplidar_scan( rplidar_t* rplidar ) {
     unsigned char buff_data[ SIZE_SCAN ];
     unsigned char quality, start_flag, start_flag_inv, check_bit;
     uint16_t angle, distance;
-
+    
+    float RPS; //store calculated rotation speed (in Hz = rotations per second)
+    struct timespec time_raw; //necessary for storing time data from clock_gettime, in ns
+    uint32_t old_time = 0; //store time of last scan (in ms) 
+    uint32_t current_time = 0;       //store time of new scan
 
     rplidar_send_request( rplidar, CMD_SCAN, NULL, 0 );
 
     rplidar_check_response( rplidar, SIZE_SCAN, MULTIPLE_RES, DATA_SCAN );
 
     uint16_t i;
-    for ( i = 0; i < 32000; i++ ) {
+    for ( i = 0; i < 8000; i++ ) {
         rplidar_read_data( rplidar, buff_data, SIZE_SCAN );
 
-        printf( "scan data:\t" );
+        printf( "scan data (%d):\t", i );
         print_raw( buff_data, SIZE_SCAN );
 
         quality = ( buff_data[0] & 0xFC );
@@ -280,12 +291,23 @@ void rplidar_scan( rplidar_t* rplidar ) {
         if ( start_flag == start_flag_inv ) printf( "error: start flags wrong (%x, %x) \n", start_flag, start_flag_inv );
         if ( check_bit != 1 ) printf( "error: check bit (%x) \n", check_bit );
 
-        if ( start_flag == 1 ) printf( "NEW 360 SCAN \n" );
-
-        printf( "Measurement %d \n", i );
-        printf( "\tQuality = %d \n", quality );
-        printf( "\tAngle = %d \n", angle);
-        printf( "\tDistance = %d \n\n", distance );
+        //printf( "Measurement %d \n", i );
+        printf( "\tQuality = %d \t", quality );
+        printf( "\tAngle = %d \t", angle);
+        printf( "\tDistance = %d \n", distance );
+        
+        if ( start_flag == 1 ) {
+            printf( "NEW 360 SCAN \n" );
+            clock_gettime( CLOCK_MONOTONIC, &time_raw );
+            current_time = time_raw.tv_nsec / 1000000;  //(time in miliseconds)
+            if ( old_time != 0 ) { 
+                RPS = ( 1000.0 / ( current_time - old_time ) );
+                printf( "old_time = %d \n", old_time );
+                printf( "current_time = %d \n", current_time );
+                printf( "Speed = %f RPM\n", RPS*60 );
+            }
+            old_time = current_time;
+        }
     }
 }
 
