@@ -31,14 +31,7 @@ struct rplidar {
 };
 
 
-//TODO: determine conditions for throwing away a Measurement
-//TODO: determine how to communicate data with SLAM algo
-//TODO: debug/verbose code?
-//TODO: error handling (errno)?
-//TODO: timing?
-//TODO: checksum?
-//TODO: motor speed control?
-
+//TODO: 
 
 /* open a new rplidar connection */
 rplidar_t* rplidar_create() {
@@ -74,7 +67,7 @@ rplidar_t* rplidar_create() {
     settings.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);    // raw input mode
     settings.c_oflag &= ~OPOST;    // raw output mode
 
-    tcflush( rplidar->serial_fd, TCIFLUSH );
+    tcflush( rplidar->serial_fd, TCIFLUSH );	//Flush input buffer
 
     if ( fcntl( rplidar->serial_fd, F_SETFL, FNDELAY ) ) {
         printf("Error: Line number %d in file %s \n", __LINE__, __FILE__);
@@ -87,13 +80,7 @@ rplidar_t* rplidar_create() {
         printf("Error: line number %d in file %s \n", __LINE__, __FILE__);
     }
 
-    //     SDK function
-    //     Clear the DTR bit to let the motor spin
-    //     uint32_t controll = TIOCM_DTR;
-    //     ioctl(serial_fd, TIOCMBIC, &controll);
-    //TODO: implement using PWM. EHRPWM2B P8.13 on BeagleBone. Set this pin high (3.3V) if constant speed (~3.3/5 = 2/3 of maximum speed or around 6.6HZ) is required.
-
-    tcflush( rplidar->serial_fd, TCOFLUSH );
+    tcflush( rplidar->serial_fd, TCOFLUSH );	//Flush output buffer
 
     return rplidar;
 }
@@ -123,7 +110,7 @@ void rplidar_send_request( rplidar_t* rplidar, unsigned char command, unsigned c
     uint8_t ans;
     unsigned char tx_len = 0;
 
-    do {    /* write bytes and check if they are all written, if last bytes are not written, resend them. TODO: infinite loop? */
+    do {    /* write bytes and check if they are all written. Alternative: make blocking.  */
         ans = write( rplidar->serial_fd, msg + tx_len, size - tx_len );
         if (ans == -1) printf( "write error \n" );
         tx_len += ans;
@@ -135,7 +122,7 @@ void rplidar_send_request( rplidar_t* rplidar, unsigned char command, unsigned c
 /* read data sent by rplidar to system */
 void rplidar_read_data( rplidar_t* rplidar, unsigned char* data, uint8_t size ) {
     uint8_t ans, rx_len = 0;
-    do {    /* write bytes and check if they are all written, if last bytes are not written, resend them. TODO: infinite loop? */
+    do {    /* write bytes and check if they are all written, if last bytes are not written, resend them. Alternative: make blocking. */
         ans = read( rplidar->serial_fd, &data[ rx_len ], size - rx_len );
         if ( ans == -1 ) {
             printf( "RD: Oh dear, something went wrong with read()! %s\n", strerror(errno) );
@@ -349,6 +336,3 @@ int main(){
 
     return 0;
 }
-
-
-//     printf("response: %x, %x, %x, %x, %x. %x, %x, %x, %x, %x, %x, %x, %x, %x, %x. %x, %x, %x, %x, %x, %x, %x. %x, %x, %x, %x, %x \n", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26] );
